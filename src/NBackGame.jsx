@@ -11,7 +11,11 @@ export function NBackGame({
   const [status, setStatus] = useState("setting");
   const [n, setN] = useState(defaultN);
   const [total, setTotal] = useState(defaultTotal);
-  const [intervalTime, setIntervalTime] = useState(defaultInterval);
+
+  // 速度管理のための2つのState
+  const [selectedSpeed, setSelectedSpeed] = useState(defaultInterval); // ユーザーの希望速度（基本）
+  const [intervalTime, setIntervalTime] = useState(defaultInterval);   // 実際に動くタイマー速度（変化する）
+
   const [currentNumber, setCurrentNumber] = useState(null);
   const [history, setHistory] = useState([]);
   const [hasAnswered, setHasAnswered] = useState(false);
@@ -22,6 +26,12 @@ export function NBackGame({
   const [showResultButton, setShowResultButton] = useState(false);
 
   const displayCount = history.length - n;
+
+  // 設定画面で速度を変える関数
+  const changeSpeed = (speed) => {
+    setSelectedSpeed(speed); // 希望速度を保存
+    setIntervalTime(speed);  // タイマーにもセット
+  };
 
   // --- ロジック関数 ---
   const checkAnswer = (userChoice) => {
@@ -38,6 +48,9 @@ export function NBackGame({
       setFeedback("❌ 残念！");
     }
     setHasAnswered(true);
+
+    // 回答したら、一時的に「2秒」に加速！
+    setIntervalTime(2000);
   };
 
   const startGame = () => {
@@ -49,6 +62,9 @@ export function NBackGame({
     setHasAnswered(false);
     setFeedback("");
     setStatus("playing");
+    setStyle({ color: "white", scale: 1 });
+    // ゲーム開始時は必ず「ユーザーの希望速度」に戻す
+    setIntervalTime(selectedSpeed);
   };
 
   const triggerEffect = () => {
@@ -72,7 +88,7 @@ export function NBackGame({
     transition: 'transform 0.1s',
   });
 
-  // 設定画面の小さいボタン
+  // 設定画面のボタン
   const toggleStyle = (active) => ({
     padding: '8px 12px',
     margin: '4px',
@@ -113,6 +129,16 @@ export function NBackGame({
       });
 
       setCurrentNumber(nextNum);
+
+      //数字が出たら、速度をチェックして元に戻す
+      setIntervalTime(prev => {
+        // つまり2秒になっていたら、元に戻す
+        if (prev !== selectedSpeed) {
+            return selectedSpeed;
+        }
+        return prev;
+      });
+
       triggerEffect();
       setHasAnswered(false);
       setFeedback(`${n}つ前とおなじ？`);
@@ -125,40 +151,36 @@ export function NBackGame({
         }
         return nextCount;
       });
-    }, intervalTime);
+    }, intervalTime); // 実際の速度（intervalTime）が変わるたびにタイマー再セット
 
     return () => clearInterval(timer);
-  }, [status, n, total, intervalTime, feedback]);
+  }, [status, n, total, intervalTime, feedback, selectedSpeed]);
 
-  //戻るボタン
+  //戻るボタン（安全装置）
   useEffect(() => {
-  if (status === "gameover") {
-    //  最初は隠す
-    setShowResultButton(false);
-    // 2秒後に表示する
-    const timer = setTimeout(() => {
-      setShowResultButton(true);
-    }, 2000);
-    return () => clearTimeout(timer);
-   }
+    if (status === "gameover") {
+      setShowResultButton(false);
+      const timer = setTimeout(() => {
+        setShowResultButton(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
   }, [status]);
 
-// --- クラッカー発射用 ---
+  // --- クラッカー発射用 ---
   useEffect(() => {
     if (status === "gameover" && score === total) {
-     // クラッカーの設定
-     confetti({
+      confetti({
         particleCount: 100,
-        angle: 60, // 右斜め上へ
+        angle: 60,
         spread: 55,
         origin: { x: 0, y: 0.8 },
         colors: ['#FFD700', '#FF00FF'],
       });
-      // 2発目：
       setTimeout(() => {
         confetti({
             particleCount: 100,
-            angle: 120, // 左斜め上へ
+            angle: 120,
             spread: 55,
             origin: { x: 1, y: 0.8 },
             colors: ['#00ff00', '#FF4500'],
@@ -175,11 +197,10 @@ export function NBackGame({
       <Html center>
         <div style={{
           background: 'rgba(20, 20, 30, 0.95)',
-          padding: '20px', // 余白を少し減らす
+          padding: '20px',
           borderRadius: '20px',
           color: 'white',
           textAlign: 'center',
-          // ★ここがポイント！スマホの幅に合わせて伸縮する
           width: '85vw',
           maxWidth: '400px',
           border: '3px solid #FFD700',
@@ -204,7 +225,7 @@ export function NBackGame({
           <div style={{ marginBottom: '20px' }}>
             <p style={{opacity: 0.8, fontSize: '0.8rem', margin: '5px'}}>速さ</p>
             {[2, 3, 5, 8].map(v => (
-              <button key={v} onClick={() => setIntervalTime(v * 1000)} style={toggleStyle(intervalTime === v * 1000)}>{v}秒</button>
+              <button key={v} onClick={() => changeSpeed(v * 1000)} style={toggleStyle(selectedSpeed === v * 1000)}>{v}秒</button>
             ))}
           </div>
 
@@ -238,16 +259,15 @@ export function NBackGame({
           {score} / {total} 問
         </Text>
 
-       <Html position={[0, -1.5, 0]} center>
-            {/* showResultButtonが true の時だけ表示！ */}
-            {showResultButton && (
-                <button
-                style={{...buttonStyle('#3498db'), width: '200px'}}
-                onClick={() => setStatus("setting")}
-                >
-                設定にもどる
-                </button>
-            )}
+        <Html position={[0, -1.5, 0]} center>
+          {showResultButton && (
+            <button
+              style={{...buttonStyle('#3498db'), width: '200px'}}
+              onClick={() => setStatus("setting")}
+            >
+              設定にもどる
+            </button>
+          )}
         </Html>
       </group>
     );
@@ -256,9 +276,11 @@ export function NBackGame({
   // 3. プレイ画面
   return (
     <group>
-      <Text position={[0, 2.5, 0]} fontSize={0.2} color="#ccc" fontWeight="bold">
-        {displayCount <= 0 ? "数字をおぼえて！" : `第 ${count - n} 問 / ${total}`}
+      <Text position={[0, 2.5, 0]} fontSize={0.2} color="#ccc">
+        {displayCount <= 0 ? "数字をおぼえてね！" : `第 ${count - n} 問 / ${total}`}
       </Text>
+
+      {/* メインの数字 */}
       <Text
         color={style.color}
         position={[0, 0, 0]}
@@ -272,23 +294,22 @@ export function NBackGame({
         {currentNumber}
       </Text>
 
-       {/* 判定ボタンを表示するタイミング */}
       {displayCount > 0 && (
         <group>
+          {/* 問いかけメッセージ */}
           <Text
             position={[0, 1.8, 0]}
             fontSize={0.25}
-            color="#FFD700"
-            fontWeight="bold"
+            color={style.color}
           >
              {feedback.includes("正解") || feedback.includes("残念") ? "" : feedback}
           </Text>
 
-          {/* 判定結果 */}
+          {/* 判定結果（大きく表示） */}
           {(feedback.includes("正解") || feedback.includes("残念")) && (
              <Text
                position={[0, 0, 0]}
-               fontSize={0.5}
+               fontSize={0.45}
                color={feedback.includes("正解") ? "#2ecc71" : "#e85f4f"}
                outlineWidth={0.05}
                outlineColor="white"
@@ -297,8 +318,8 @@ export function NBackGame({
              </Text>
           )}
 
-          {/* ボタン配置：*/}
-          <Html position={[0, -1.5, 0]} center>
+          {/* ボタン配置 */}
+          <Html position={[0, -2, 0]} center>
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', width: '90vw' }}>
               <button style={buttonStyle('#2ecc71')} onClick={() => checkAnswer(true)}>⭕️ おなじ</button>
               <button style={buttonStyle('#e85f4f')} onClick={() => checkAnswer(false)}>❌ ちがう</button>
